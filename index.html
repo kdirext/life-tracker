@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Life Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0f10;
+  --surface: #1a1a1d;
+  --surface2: #242428;
+  --border: #2e2e33;
+  --text: #f0f0f2;
+  --text2: #8a8a95;
+  --text3: #55555f;
+  --accent: #7c6fff;
+  --accent2: #a594ff;
+  --green: #3ecf8e;
+  --amber: #f5a623;
+  --red: #f56565;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans Thai', sans-serif; font-size: 15px; }
+
+/* Layout */
+.app { display: flex; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; }
+.header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.header-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; flex: 1; }
+.header-date { font-size: 12px; color: var(--text2); font-family: 'IBM Plex Mono', monospace; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); transition: background 0.3s; }
+.sync-dot.synced { background: var(--green); }
+.sync-dot.syncing { background: var(--amber); animation: pulse 1s infinite; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.nav { display: flex; border-bottom: 1px solid var(--border); }
+.nav-btn { flex: 1; padding: 12px; text-align: center; font-size: 13px; color: var(--text2); cursor: pointer; border: none; background: transparent; transition: all 0.15s; position: relative; }
+.nav-btn.active { color: var(--accent2); }
+.nav-btn.active::after { content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; }
+
+.content { flex: 1; overflow-y: auto; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* Date nav */
+.date-nav { display: flex; align-items: center; padding: 12px 16px; gap: 8px; border-bottom: 1px solid var(--border); }
+.date-nav-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.date-display { flex: 1; text-align: center; }
+.date-display .day-name { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+.date-display .day-full { font-size: 15px; font-weight: 500; }
+.today-pill { font-size: 11px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--accent); color: var(--accent2); background: transparent; cursor: pointer; }
+
+/* Timeline */
+.timeline { padding: 8px 0 80px; }
+.hour-block { display: flex; gap: 0; min-height: 52px; position: relative; }
+.hour-block + .hour-block { border-top: 1px solid var(--border); }
+.hour-time { width: 52px; padding: 14px 12px 0; font-size: 11px; color: var(--text3); font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; }
+.hour-entry { flex: 1; padding: 10px 14px 10px 4px; cursor: pointer; display: flex; align-items: center; gap: 10px; min-height: 52px; }
+.hour-entry:active { background: var(--surface); }
+.entry-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border); }
+.entry-dot.filled { border: none; }
+.entry-text { flex: 1; }
+.entry-cat { font-size: 13px; font-weight: 500; }
+.entry-note { font-size: 12px; color: var(--text2); margin-top: 1px; }
+.entry-empty { font-size: 13px; color: var(--text3); }
+.entry-del { width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent; color: var(--text3); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+.hour-block:hover .entry-del { opacity: 1; }
+
+/* Bottom sheet */
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; display: none; align-items: flex-end; }
+.sheet-overlay.open { display: flex; }
+.sheet { background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px; width: 100%; max-width: 480px; margin: 0 auto; }
+.sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
+.sheet-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.cat-scroll { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.cat-chip { padding: 7px 14px; border-radius: 99px; border: 1.5px solid var(--border); background: transparent; color: var(--text2); font-size: 13px; cursor: pointer; font-family: 'IBM Plex Sans Thai', sans-serif; transition: all 0.1s; display: flex; align-items: center; gap: 6px; }
+.cat-chip.sel { color: var(--text); border-color: transparent; }
+.cat-dot-sm { width: 8px; height: 8px; border-radius: 50%; }
+.note-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; font-family: 'IBM Plex Sans Thai', sans-serif; margin-bottom: 14px; outline: none; }
+.note-input:focus { border-color: var(--accent); }
+.sheet-actions { display: flex; gap: 10px; }
+.btn { flex: 1; padding: 12px; border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; border: none; font-family: 'IBM Plex Sans Thai', sans-serif; }
+.btn-cancel { background: var(--surface2); color: var(--text2); }
+.btn-save { background: var(--accent); color: #fff; }
+
+/* Summary */
+.summary-pad { padding: 16px; }
+.period-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+.period-tab { padding: 7px 16px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 13px; cursor: pointer; font-family: 'IBM Plex Sans Thai', sans-serif; }
+.period-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border-radius: var(--radius); padding: 14px; border: 1px solid var(--border); }
+.stat-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-val { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+.section-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.bar-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.bar-item { display: grid; grid-template-columns: 110px 1fr 44px; gap: 10px; align-items: center; }
+.bar-name { font-size: 13px; color: var(--text2); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { height: 8px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+.bar-val { font-size: 12px; color: var(--text3); font-family: 'IBM Plex Mono', monospace; }
+.empty-msg { text-align: center; padding: 48px 24px; color: var(--text3); font-size: 14px; line-height: 1.8; }
+
+/* Settings */
+.settings-pad { padding: 16px; }
+.settings-section { margin-bottom: 24px; }
+.settings-title { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.cat-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--surface); border-radius: var(--radius); margin-bottom: 6px; border: 1px solid var(--border); }
+.cat-color-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.cat-row-name { flex: 1; font-size: 14px; }
+.cat-del-btn { background: transparent; border: none; color: var(--text3); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.add-cat { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 10px; align-items: center; }
+.add-cat input[type=text] { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 9px 12px; font-size: 13px; font-family: 'IBM Plex Sans Thai', sans-serif; outline: none; }
+.add-cat input[type=text]:focus { border-color: var(--accent); }
+.add-cat input[type=color] { width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; padding: 2px; }
+.add-cat button { padding: 9px 14px; background: var(--accent); border: none; color: #fff; border-radius: var(--radius); font-size: 13px; cursor: pointer; font-family: 'IBM Plex Sans Thai', sans-serif; }
+.export-btn { width: 100%; padding: 12px; background: var(--surface); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); font-size: 14px; cursor: pointer; font-family: 'IBM Plex Sans Thai', sans-serif; margin-bottom: 8px; }
+
+/* Loading */
+.loading { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 999; }
+.loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.loading-text { font-size: 13px; color: var(--text2); }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">กำลังเชื่อมต่อ...</div>
+</div>
+
+<div class="app" id="app" style="display:none">
+  <div class="header">
+    <div class="header-title">Life Tracker</div>
+    <div class="header-date" id="header-date"></div>
+    <div class="sync-dot" id="sync-dot"></div>
+  </div>
+  <div class="nav">
+    <button class="nav-btn active" onclick="switchView('log')">📋 บันทึก</button>
+    <button class="nav-btn" onclick="switchView('summary')">📊 วิเคราะห์</button>
+    <button class="nav-btn" onclick="switchView('settings')">⚙️ ตั้งค่า</button>
+  </div>
+  <div class="content">
+    <!-- LOG VIEW -->
+    <div class="view active" id="view-log">
+      <div class="date-nav">
+        <button class="date-nav-btn" onclick="changeDay(-1)">‹</button>
+        <div class="date-display">
+          <div class="day-name" id="day-name"></div>
+          <div class="day-full" id="day-full"></div>
+        </div>
+        <button class="date-nav-btn" onclick="changeDay(1)">›</button>
+        <button class="today-pill" onclick="goToday()">วันนี้</button>
+      </div>
+      <div class="timeline" id="timeline"></div>
+    </div>
+
+    <!-- SUMMARY VIEW -->
+    <div class="view" id="view-summary">
+      <div class="summary-pad">
+        <div class="period-tabs">
+          <button class="period-tab active" onclick="setPeriod(7,this)">7 วัน</button>
+          <button class="period-tab" onclick="setPeriod(30,this)">30 วัน</button>
+          <button class="period-tab" onclick="setPeriod(90,this)">90 วัน</button>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+        <div class="section-label">สัดส่วนเวลา</div>
+        <div class="bar-list" id="bar-list"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div class="view" id="view-settings">
+      <div class="settings-pad">
+        <div class="settings-section">
+          <div class="settings-title">หมวดหมู่กิจกรรม</div>
+          <div id="cat-list"></div>
+          <div class="add-cat">
+            <input type="text" id="new-cat-name" placeholder="ชื่อหมวดหมู่ใหม่">
+            <input type="color" id="new-cat-color" value="#7c6fff">
+            <button onclick="addCategory()">เพิ่ม</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">ข้อมูล</div>
+          <button class="export-btn" onclick="exportJSON()">⬇ Export JSON</button>
+          <button class="export-btn" style="color:var(--red)" onclick="clearAll()">🗑 ล้างข้อมูลทั้งหมด</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM SHEET -->
+<div class="sheet-overlay" id="sheet" onclick="closeSheet(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheet-title">บันทึกเวลา</div>
+    <div class="cat-scroll" id="cat-chips"></div>
+    <input class="note-input" type="text" id="note-input" placeholder="บันทึกเพิ่มเติม เช่น ประชุม Q2, วิ่ง 5km...">
+    <div class="sheet-actions">
+      <button class="btn btn-cancel" onclick="closeSheet()">ยกเลิก</button>
+      <button class="btn btn-save" onclick="saveEntry()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ===== YOUR FIREBASE CONFIG =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBFn_SY8R23TwnBcYz7u7ZxM0IBwR9PMsE",
+  authDomain: "korn-life-tracker.firebaseapp.com",
+  projectId: "korn-life-tracker",
+  storageBucket: "korn-life-tracker.firebasestorage.app",
+  messagingSenderId: "1014696586433",
+  appId: "1:1014696586433:web:c1101f0f3a24438fb0f840",
+  measurementId: "G-GX7XSTQ5SB"
+};
+// ================================
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// State
+let currentDay = new Date();
+let categories = [
+  { id: 'work', name: 'ทำงาน', color: '#378ADD' },
+  { id: 'learn', name: 'เรียนรู้', color: '#3ecf8e' },
+  { id: 'exercise', name: 'ออกกำลังกาย', color: '#f5a623' },
+  { id: 'social', name: 'สังคม/ครอบครัว', color: '#a594ff' },
+  { id: 'sleep', name: 'นอนหลับ', color: '#8a8a95' },
+  { id: 'leisure', name: 'พักผ่อน', color: '#f56565' },
+  { id: 'personal', name: 'ส่วนตัว', color: '#f0c040' },
+  { id: 'commute', name: 'เดินทาง', color: '#5DCAA5' },
+];
+let dayEntries = {}; // { hour: { cat, note } }
+let selectedCat = null;
+let openHour = null;
+let summaryPeriod = 7;
+let unsubscribe = null;
+
+// Helpers
+function dateKey(d) { return d.toISOString().slice(0,10); }
+function catById(id) { return categories.find(c => c.id === id); }
+
+function setSyncState(state) {
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot ' + state;
+}
+
+// ---- FIRESTORE ----
+async function subscribeToDay(key) {
+  if (unsubscribe) unsubscribe();
+  setSyncState('syncing');
+  const ref = doc(db, 'days', key);
+  unsubscribe = onSnapshot(ref, snap => {
+    dayEntries = snap.exists() ? (snap.data().hours || {}) : {};
+    renderTimeline();
+    setSyncState('synced');
+  });
+}
+
+async function saveEntryToFirestore(key, hour, data) {
+  setSyncState('syncing');
+  const ref = doc(db, 'days', key);
+  const existing = { ...dayEntries };
+  if (data) existing[hour] = data;
+  else delete existing[hour];
+  await setDoc(ref, { hours: existing, date: key }, { merge: false });
+  setSyncState('synced');
+}
+
+async function loadCategories() {
+  try {
+    const ref = doc(db, 'settings', 'categories');
+    onSnapshot(ref, snap => {
+      if (snap.exists() && snap.data().list) {
+        categories = snap.data().list;
+        renderSettings();
+      }
+    });
+  } catch(e) {}
+}
+
+async function saveCategories() {
+  const ref = doc(db, 'settings', 'categories');
+  await setDoc(ref, { list: categories });
+}
+
+// ---- VIEWS ----
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  const idx = ['log','summary','settings'].indexOf(name);
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  if (name === 'summary') renderSummary();
+  if (name === 'settings') renderSettings();
+}
+window.switchView = switchView;
+
+// ---- LOG ----
+const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+function updateDateHeader() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cd = new Date(currentDay); cd.setHours(0,0,0,0);
+  const isToday = cd.getTime() === today.getTime();
+  document.getElementById('day-name').textContent = (isToday ? 'วันนี้ · ' : '') + DAYS[currentDay.getDay()];
+  document.getElementById('day-full').textContent = currentDay.getDate() + ' ' + MONTHS[currentDay.getMonth()] + ' ' + (currentDay.getFullYear()+543);
+  const now = new Date();
+  document.getElementById('header-date').textContent = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+}
+
+function renderTimeline() {
+  updateDateHeader();
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  for (let h = 0; h < 24; h++) {
+    const entry = dayEntries[h];
+    const cat = entry ? catById(entry.cat) : null;
+    const block = document.createElement('div');
+    block.className = 'hour-block';
+    block.innerHTML = `
+      <div class="hour-time">${h.toString().padStart(2,'0')}:00</div>
+      <div class="hour-entry" onclick="openSheet(${h})">
+        <div class="entry-dot ${entry?'filled':''}" style="${cat?'background:'+cat.color+';':''} ${!entry?'background:var(--surface2);':''}"></div>
+        <div class="entry-text">
+          ${entry && cat
+            ? `<div class="entry-cat" style="color:${cat.color}">${cat.name}</div>${entry.note?`<div class="entry-note">${esc(entry.note)}</div>`:''}`
+            : `<div class="entry-empty">แตะเพื่อบันทึก</div>`}
+        </div>
+        ${entry ? `<button class="entry-del" onclick="delEntry(event,${h})">×</button>` : ''}
+      </div>`;
+    tl.appendChild(block);
+  }
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+window.changeDay = function(d) {
+  currentDay = new Date(currentDay);
+  currentDay.setDate(currentDay.getDate()+d);
+  subscribeToDay(dateKey(currentDay));
+  updateDateHeader();
+};
+window.goToday = function() {
+  currentDay = new Date();
+  subscribeToDay(dateKey(currentDay));
+  updateDateHeader();
+};
+
+// ---- SHEET ----
+window.openSheet = function(h) {
+  openHour = h;
+  selectedCat = dayEntries[h]?.cat || null;
+  const entry = dayEntries[h];
+  document.getElementById('sheet-title').textContent = h.toString().padStart(2,'0') + ':00 — ' + (h+1).toString().padStart(2,'0') + ':00';
+  document.getElementById('note-input').value = entry?.note || '';
+  renderChips();
+  document.getElementById('sheet').classList.add('open');
+  setTimeout(() => document.getElementById('note-input').focus(), 300);
+};
+
+function renderChips() {
+  const cont = document.getElementById('cat-chips');
+  cont.innerHTML = categories.map(c => `
+    <button class="cat-chip ${selectedCat===c.id?'sel':''}" 
+      style="${selectedCat===c.id?'background:'+c.color+'22;border-color:'+c.color+';color:'+c.color:''}"
+      onclick="selectCat('${c.id}','${c.color}')">
+      <div class="cat-dot-sm" style="background:${c.color}"></div>${c.name}
+    </button>`).join('');
+}
+
+window.selectCat = function(id, color) {
+  selectedCat = id;
+  renderChips();
+};
+
+window.closeSheet = function(e) {
+  if (e && e.target !== document.getElementById('sheet')) return;
+  document.getElementById('sheet').classList.remove('open');
+  openHour = null; selectedCat = null;
+};
+
+window.saveEntry = async function() {
+  if (!selectedCat) { alert('เลือกหมวดหมู่ก่อนนะครับ'); return; }
+  const note = document.getElementById('note-input').value.trim();
+  const key = dateKey(currentDay);
+  await saveEntryToFirestore(key, openHour, { cat: selectedCat, note });
+  document.getElementById('sheet').classList.remove('open');
+  openHour = null; selectedCat = null;
+};
+
+window.delEntry = async function(e, h) {
+  e.stopPropagation();
+  if (!confirm('ลบรายการนี้?')) return;
+  await saveEntryToFirestore(dateKey(currentDay), h, null);
+};
+
+// ---- SUMMARY ----
+window.setPeriod = function(p, btn) {
+  summaryPeriod = p;
+  document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSummary();
+};
+
+async function renderSummary() {
+  const counts = {}; let total = 0; let daysWithData = 0;
+  categories.forEach(c => counts[c.id] = 0);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  for (let i = summaryPeriod-1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate()-i);
+    try {
+      const ref = doc(db, 'days', dateKey(d));
+      const snap = await getDocs ? null : null;
+      // use cache from onSnapshot if available, else fetch
+    } catch(e) {}
+  }
+
+  // Fetch all days in range
+  let allHours = 0; let allDays = 0;
+  const fetches = [];
+  for (let i = summaryPeriod-1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate()-i);
+    fetches.push(fetch_day(dateKey(d)));
+  }
+  const results = await Promise.all(fetches);
+  results.forEach(hours => {
+    const entries = Object.values(hours);
+    if (entries.length > 0) allDays++;
+    entries.forEach(e => {
+      allHours++;
+      if (counts[e.cat] !== undefined) counts[e.cat]++;
+    });
+  });
+
+  const avg = allDays ? (allHours/allDays).toFixed(1) : 0;
+  const topEntry = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  const topCat = topEntry ? catById(topEntry[0]) : null;
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">ชั่วโมงที่บันทึก</div><div class="stat-val">${allHours}</div><div class="stat-sub">${summaryPeriod} วันล่าสุด</div></div>
+    <div class="stat-card"><div class="stat-label">เฉลี่ยต่อวัน</div><div class="stat-val">${avg}</div><div class="stat-sub">ชั่วโมง/วัน</div></div>
+    <div class="stat-card"><div class="stat-label">วันที่มีข้อมูล</div><div class="stat-val">${allDays}</div><div class="stat-sub">จาก ${summaryPeriod} วัน</div></div>
+    <div class="stat-card"><div class="stat-label">กิจกรรมหลัก</div><div class="stat-val" style="font-size:16px;margin-top:4px">${topCat?topCat.name:'—'}</div><div class="stat-sub">${topEntry?topEntry[1]:0} ชม.</div></div>`;
+
+  const sorted = categories.filter(c=>counts[c.id]>0).sort((a,b)=>counts[b.id]-counts[a.id]);
+  const maxVal = sorted[0] ? counts[sorted[0].id] : 1;
+  if (sorted.length === 0) {
+    document.getElementById('bar-list').innerHTML = '<div class="empty-msg">ยังไม่มีข้อมูลในช่วงนี้<br>เริ่มบันทึกได้เลยครับ</div>';
+  } else {
+    document.getElementById('bar-list').innerHTML = sorted.map(c => {
+      const pct = Math.round((counts[c.id]/maxVal)*100);
+      const hrPct = allHours ? Math.round((counts[c.id]/allHours)*100) : 0;
+      return `<div class="bar-item">
+        <div class="bar-name" style="color:${c.color}">${c.name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color}"></div></div>
+        <div class="bar-val">${counts[c.id]}h·${hrPct}%</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function fetch_day(key) {
+  try {
+    const { getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const ref = doc(db, 'days', key);
+    const snap = await getDoc(ref);
+    return snap.exists() ? (snap.data().hours || {}) : {};
+  } catch(e) { return {}; }
+}
+
+// ---- SETTINGS ----
+function renderSettings() {
+  document.getElementById('cat-list').innerHTML = categories.map((c,i) => `
+    <div class="cat-row">
+      <div class="cat-color-dot" style="background:${c.color}"></div>
+      <div class="cat-row-name">${c.name}</div>
+      <button class="cat-del-btn" onclick="deleteCategory(${i})">×</button>
+    </div>`).join('');
+}
+
+window.addCategory = async function() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  const color = document.getElementById('new-cat-color').value;
+  if (!name) return;
+  categories.push({ id: 'cat_'+Date.now(), name, color });
+  document.getElementById('new-cat-name').value = '';
+  await saveCategories();
+  renderSettings();
+};
+
+window.deleteCategory = async function(i) {
+  if (!confirm('ลบหมวดหมู่นี้?')) return;
+  categories.splice(i, 1);
+  await saveCategories();
+  renderSettings();
+};
+
+window.exportJSON = function() {
+  const blob = new Blob([JSON.stringify({ categories, entries: dayEntries }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'life-tracker-' + dateKey(new Date()) + '.json';
+  a.click();
+};
+
+window.clearAll = async function() {
+  if (!confirm('ล้างข้อมูลทั้งหมด? ไม่สามารถกู้คืนได้')) return;
+  dayEntries = {};
+  await saveEntryToFirestore(dateKey(currentDay), null, null);
+  renderTimeline();
+};
+
+// ---- INIT ----
+async function init() {
+  await loadCategories();
+  await subscribeToDay(dateKey(currentDay));
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  updateDateHeader();
+  setInterval(updateDateHeader, 30000);
+}
+
+init();
+</script>
+</body>
+</html>
